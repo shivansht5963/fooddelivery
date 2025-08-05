@@ -1,19 +1,27 @@
 package com.fooddelivery.controller;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpSession;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.fooddelivery.model.Cart;
 import com.fooddelivery.model.CartItem;
 import com.fooddelivery.model.MenuItem;
 import com.fooddelivery.service.CartService;
 import com.fooddelivery.service.MenuService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import javax.servlet.http.HttpSession;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api")
@@ -51,9 +59,7 @@ public class ApiController {
         response.put("cartItems", cartItems);
         response.put("totalItems", cart.getTotalItems());
         response.put("subtotal", cart.getSubtotal());
-        response.put("gst", cart.getGst());
         response.put("deliveryCharge", cart.getDeliveryCharge());
-        response.put("packagingCharge", cart.getPackagingCharge());
         response.put("total", cart.getTotal());
         
         return ResponseEntity.ok(response);
@@ -113,10 +119,10 @@ public class ApiController {
     }
     
     private String getSessionId(HttpSession session) {
-        String sessionId = (String) session.getAttribute("sessionId");
+        String sessionId = (String) session.getAttribute("cartSessionId");
         if (sessionId == null) {
-            sessionId = UUID.randomUUID().toString();
-            session.setAttribute("sessionId", sessionId);
+            sessionId = java.util.UUID.randomUUID().toString();
+            session.setAttribute("cartSessionId", sessionId);
         }
         return sessionId;
     }

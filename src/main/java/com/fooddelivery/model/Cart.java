@@ -1,9 +1,18 @@
 package com.fooddelivery.model;
 
-import javax.persistence.*;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.persistence.CascadeType;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.FetchType;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.OneToMany;
+import javax.persistence.Table;
 
 @Entity
 @Table(name = "carts")
@@ -97,20 +106,15 @@ public class Cart {
     }
     
     public BigDecimal getDeliveryCharge() {
-        // Free delivery for orders above 500, otherwise 50
-        if (getSubtotal().compareTo(new BigDecimal("500")) >= 0) {
+        // Free delivery for orders above 400, otherwise 70
+        if (getSubtotal().compareTo(new BigDecimal("400")) >= 0) {
             return BigDecimal.ZERO;
         }
-        return new BigDecimal("50");
-    }
-    
-    public BigDecimal getPackagingCharge() {
-        // 20 packaging charge
-        return new BigDecimal("20");
+        return new BigDecimal("70");
     }
     
     public BigDecimal getTotal() {
-        return getSubtotal().add(getGst()).add(getDeliveryCharge()).add(getPackagingCharge());
+        return getSubtotal().add(getDeliveryCharge());
     }
     
     public int getTotalItems() {
