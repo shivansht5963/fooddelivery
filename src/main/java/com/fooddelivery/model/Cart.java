@@ -11,6 +11,8 @@ import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.JoinColumn;
+import javax.persistence.ManyToOne;
 import javax.persistence.OneToMany;
 import javax.persistence.Table;
 
@@ -24,6 +26,10 @@ public class Cart {
     
     @Column(name = "session_id", unique = true)
     private String sessionId;
+    
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
     
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
     private List<CartItem> items = new ArrayList<>();
@@ -44,6 +50,11 @@ public class Cart {
         this.sessionId = sessionId;
     }
     
+    public Cart(String sessionId, User user) {
+        this.sessionId = sessionId;
+        this.user = user;
+    }
+    
     // Getters and Setters
     public Long getId() {
         return id;
@@ -59,6 +70,14 @@ public class Cart {
     
     public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
+    }
+    
+    public User getUser() {
+        return user;
+    }
+    
+    public void setUser(User user) {
+        this.user = user;
     }
     
     public List<CartItem> getItems() {
@@ -100,11 +119,6 @@ public class Cart {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
     
-    public BigDecimal getGst() {
-        // 18% GST
-        return getSubtotal().multiply(new BigDecimal("0.18"));
-    }
-    
     public BigDecimal getDeliveryCharge() {
         // Free delivery for orders above 400, otherwise 70
         if (getSubtotal().compareTo(new BigDecimal("400")) >= 0) {
@@ -142,6 +156,7 @@ public class Cart {
         return "Cart{" +
                 "id=" + id +
                 ", sessionId='" + sessionId + '\'' +
+                ", userId=" + (user != null ? user.getId() : "null") +
                 ", itemsCount=" + items.size() +
                 ", subtotal=" + getSubtotal() +
                 ", total=" + getTotal() +

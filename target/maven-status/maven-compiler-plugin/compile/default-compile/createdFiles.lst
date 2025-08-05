@@ -1,9 +1,14 @@
 com\fooddelivery\controller\ApiController.class
+com\fooddelivery\config\FirebaseConfig.class
+com\fooddelivery\controller\AuthController.class
 com\fooddelivery\controller\CartController.class
 com\fooddelivery\model\MenuItem.class
 com\fooddelivery\FoodDeliveryApplication.class
+com\fooddelivery\repository\UserRepository.class
 com\fooddelivery\controller\MenuController.class
 com\fooddelivery\repository\CartItemRepository.class
+com\fooddelivery\service\UserService.class
+com\fooddelivery\model\User.class
 com\fooddelivery\service\CartService.class
 com\fooddelivery\model\Cart.class
 com\fooddelivery\repository\MenuItemRepository.class

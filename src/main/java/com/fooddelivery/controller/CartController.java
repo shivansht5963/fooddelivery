@@ -1,6 +1,7 @@
 package com.fooddelivery.controller;
 
 import java.util.List;
+import java.util.Optional;
 
 import javax.servlet.http.HttpSession;
 
@@ -15,7 +16,9 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.fooddelivery.model.Cart;
 import com.fooddelivery.model.CartItem;
+import com.fooddelivery.model.User;
 import com.fooddelivery.service.CartService;
+import com.fooddelivery.service.UserService;
 
 @Controller
 @RequestMapping("/cart")
@@ -23,16 +26,28 @@ public class CartController {
 
     @Autowired
     private CartService cartService;
+    
+    @Autowired
+    private UserService userService;
 
     @GetMapping
     public String showCart(Model model, HttpSession session) {
         String sessionId = getSessionId(session);
-        Cart cart = cartService.getOrCreateCart(sessionId);
+        User user = getCurrentUser(session);
+        
+        Cart cart;
+        if (user != null) {
+            cart = cartService.getUserCart(sessionId, user);
+        } else {
+            cart = cartService.getOrCreateCart(sessionId);
+        }
+        
         List<CartItem> cartItems = cartService.getCartItems(sessionId);
         
         model.addAttribute("cart", cart);
         model.addAttribute("cartItems", cartItems);
         model.addAttribute("currentYear", java.time.Year.now().getValue());
+        model.addAttribute("user", user);
         
         return "index";
     }
@@ -43,7 +58,13 @@ public class CartController {
                            HttpSession session, 
                            RedirectAttributes redirectAttributes) {
         String sessionId = getSessionId(session);
-        cartService.addItemToCart(sessionId, menuItemId, quantity);
+        User user = getCurrentUser(session);
+        
+        if (user != null) {
+            cartService.addItemToUserCart(sessionId, menuItemId, quantity, user);
+        } else {
+            cartService.addItemToCart(sessionId, menuItemId, quantity);
+        }
         
         redirectAttributes.addFlashAttribute("message", "Item added to cart successfully!");
         return "redirect:/menu";
@@ -76,7 +97,15 @@ public class CartController {
     @GetMapping("/checkout")
     public String checkout(Model model, HttpSession session) {
         String sessionId = getSessionId(session);
-        Cart cart = cartService.getCart(sessionId);
+        User user = getCurrentUser(session);
+        
+        Cart cart;
+        if (user != null) {
+            cart = cartService.getUserCart(sessionId, user);
+        } else {
+            cart = cartService.getCart(sessionId);
+        }
+        
         List<CartItem> cartItems = cartService.getCartItems(sessionId);
         
         if (cartItems.isEmpty()) {
@@ -86,6 +115,7 @@ public class CartController {
         model.addAttribute("cart", cart);
         model.addAttribute("cartItems", cartItems);
         model.addAttribute("currentYear", java.time.Year.now().getValue());
+        model.addAttribute("user", user);
         
         return "index";
     }
@@ -97,16 +127,26 @@ public class CartController {
                                    Model model, 
                                    HttpSession session) {
         String sessionId = getSessionId(session);
-        Cart cart = cartService.getCart(sessionId);
+        User user = getCurrentUser(session);
         
-        // Update customer information
-        cartService.updateCustomerInfo(sessionId, customerName, customerPhone, deliveryAddress);
+        Cart cart;
+        if (user != null) {
+            cart = cartService.getUserCart(sessionId, user);
+            cartService.updateUserCartInfo(sessionId, customerName, customerPhone, deliveryAddress, user);
+        } else {
+            cart = cartService.getCart(sessionId);
+            cartService.updateCustomerInfo(sessionId, customerName, customerPhone, deliveryAddress);
+        }
+        
+        // Process order completion for user statistics
+        cartService.processOrderCompletion(cart);
         
         // Clear cart after order confirmation
         cartService.clearCart(sessionId);
         
         model.addAttribute("orderDetails", cart);
         model.addAttribute("currentYear", java.time.Year.now().getValue());
+        model.addAttribute("user", user);
         
         return "index";
     }
@@ -118,5 +158,14 @@ public class CartController {
             session.setAttribute("cartSessionId", sessionId);
         }
         return sessionId;
+    }
+    
+    private User getCurrentUser(HttpSession session) {
+        String firebaseUid = (String) session.getAttribute("firebaseUid");
+        if (firebaseUid != null) {
+            Optional<User> userOpt = userService.findByFirebaseUid(firebaseUid);
+            return userOpt.orElse(null);
+        }
+        return null;
     }
 } 

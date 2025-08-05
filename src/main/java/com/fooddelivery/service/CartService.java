@@ -1,15 +1,17 @@
 package com.fooddelivery.service;
 
-import com.fooddelivery.model.Cart;
-import com.fooddelivery.model.CartItem;
-import com.fooddelivery.model.MenuItem;
-import com.fooddelivery.repository.CartItemRepository;
-import com.fooddelivery.repository.CartRepository;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Optional;
+import com.fooddelivery.model.Cart;
+import com.fooddelivery.model.CartItem;
+import com.fooddelivery.model.MenuItem;
+import com.fooddelivery.model.User;
+import com.fooddelivery.repository.CartItemRepository;
+import com.fooddelivery.repository.CartRepository;
 
 @Service
 public class CartService {
@@ -23,12 +25,31 @@ public class CartService {
     @Autowired
     private MenuService menuService;
     
+    @Autowired
+    private UserService userService;
+    
     public Cart getOrCreateCart(String sessionId) {
         Optional<Cart> existingCart = cartRepository.findBySessionId(sessionId);
         if (existingCart.isPresent()) {
             return existingCart.get();
         } else {
             Cart newCart = new Cart(sessionId);
+            return cartRepository.save(newCart);
+        }
+    }
+    
+    public Cart getOrCreateUserCart(String sessionId, User user) {
+        Optional<Cart> existingCart = cartRepository.findBySessionId(sessionId);
+        if (existingCart.isPresent()) {
+            Cart cart = existingCart.get();
+            // Link cart to user if not already linked
+            if (cart.getUser() == null) {
+                cart.setUser(user);
+                cartRepository.save(cart);
+            }
+            return cart;
+        } else {
+            Cart newCart = new Cart(sessionId, user);
             return cartRepository.save(newCart);
         }
     }
@@ -49,6 +70,11 @@ public class CartService {
                 cartItemRepository.save(newItem);
             }
         }
+    }
+    
+    public void addItemToUserCart(String sessionId, Long menuItemId, Integer quantity, User user) {
+        Cart cart = getOrCreateUserCart(sessionId, user);
+        addItemToCart(sessionId, menuItemId, quantity);
     }
     
     public void updateItemQuantity(String sessionId, Long menuItemId, Integer quantity) {
@@ -80,6 +106,10 @@ public class CartService {
         return getOrCreateCart(sessionId);
     }
     
+    public Cart getUserCart(String sessionId, User user) {
+        return getOrCreateUserCart(sessionId, user);
+    }
+    
     public void updateCustomerInfo(String sessionId, String customerName, String customerPhone, String deliveryAddress) {
         Cart cart = getOrCreateCart(sessionId);
         cart.setCustomerName(customerName);
@@ -88,7 +118,23 @@ public class CartService {
         cartRepository.save(cart);
     }
     
+    public void updateUserCartInfo(String sessionId, String customerName, String customerPhone, String deliveryAddress, User user) {
+        Cart cart = getOrCreateUserCart(sessionId, user);
+        cart.setCustomerName(customerName);
+        cart.setCustomerPhone(customerPhone);
+        cart.setDeliveryAddress(deliveryAddress);
+        cartRepository.save(cart);
+    }
+    
     public void deleteCart(String sessionId) {
         cartRepository.deleteBySessionId(sessionId);
+    }
+    
+    public void processOrderCompletion(Cart cart) {
+        if (cart.getUser() != null) {
+            User user = cart.getUser();
+            userService.incrementOrderCount(user);
+            userService.addToTotalSpent(user, cart.getTotal());
+        }
     }
 } 

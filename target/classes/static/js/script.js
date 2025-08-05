@@ -7,6 +7,25 @@ let cart = [];
 // Current page
 let currentPage = 'home';
 
+// Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyBYqZaHP4-DmzPp7LG046BPRdTPz4_aXhU",
+    authDomain: "pure-healthy-eats.firebaseapp.com",
+    projectId: "pure-healthy-eats",
+    storageBucket: "pure-healthy-eats.firebasestorage.app",
+    messagingSenderId: "762868384506",
+    appId: "1:762868384506:web:bf8c239a75760fc625ff43",
+    measurementId: "G-HTKJ99PTVV"
+};
+
+// Initialize Firebase
+if (typeof firebase !== 'undefined') {
+    firebase.initializeApp(firebaseConfig);
+}
+
+// Authentication state
+let currentUser = null;
+
 // Initialize the application
 function initializeApp() {
     // Load cart from localStorage
@@ -23,7 +42,317 @@ function initializeApp() {
     
     // Load menu items from server
     loadMenuItems();
+    
+    // Check authentication state
+    checkAuthState();
 }
+
+// Check authentication state
+function checkAuthState() {
+    // Check Firebase authentication state
+    if (typeof firebase !== 'undefined' && firebase.auth) {
+        firebase.auth().onAuthStateChanged(function(user) {
+            if (user) {
+                // User is signed in with Firebase
+                // Check if user exists in our backend
+                fetch('/auth/user-info')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.user) {
+                            currentUser = data.user;
+                        } else {
+                            // User exists in Firebase but not in our backend
+                            // This shouldn't happen, but handle it gracefully
+                            currentUser = {
+                                firebaseUid: user.uid,
+                                displayName: user.displayName || user.email.split('@')[0],
+                                email: user.email
+                            };
+                        }
+                        updateAuthUI();
+                    })
+                    .catch(error => {
+                        console.log('Error checking user info:', error);
+                        // Still show user as logged in if Firebase auth is valid
+                        currentUser = {
+                            firebaseUid: user.uid,
+                            displayName: user.displayName || user.email.split('@')[0],
+                            email: user.email
+                        };
+                        updateAuthUI();
+                    });
+            } else {
+                // User is signed out
+                currentUser = null;
+                updateAuthUI();
+            }
+        });
+    } else {
+        // Fallback to session-based auth if Firebase is not available
+        fetch('/auth/user-info')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.user) {
+                    currentUser = data.user;
+                    updateAuthUI();
+                }
+            })
+            .catch(error => {
+                console.log('User not authenticated');
+            });
+    }
+}
+
+// Update authentication UI
+function updateAuthUI() {
+    const userMenu = document.querySelector('.user-menu');
+    const loginBtn = document.querySelector('.login-btn');
+    
+    if (currentUser) {
+        if (userMenu) {
+            userMenu.style.display = 'block';
+            userMenu.style.visibility = 'visible';
+        }
+        if (loginBtn) {
+            loginBtn.style.display = 'none';
+            loginBtn.style.visibility = 'hidden';
+        }
+        
+        // Update user name
+        const userName = document.querySelector('.user-name');
+        if (userName) {
+            userName.textContent = currentUser.displayName;
+        }
+        
+        // Hide login page if user is logged in
+        const loginPage = document.getElementById('login');
+        if (loginPage && loginPage.classList.contains('active')) {
+            showPage('home');
+        }
+    } else {
+        if (userMenu) {
+            userMenu.style.display = 'none';
+            userMenu.style.visibility = 'hidden';
+        }
+        if (loginBtn) {
+            loginBtn.style.display = 'flex';
+            loginBtn.style.visibility = 'visible';
+        }
+    }
+    
+    // Force re-render of current page to update UI
+    if (currentPage === 'cart') {
+        renderCart();
+    } else if (currentPage === 'checkout') {
+        renderCheckout();
+    }
+}
+
+// Authentication functions
+function switchAuthTab(tab) {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const loginTab = document.querySelector('.auth-tab[onclick*="login"]');
+    const registerTab = document.querySelector('.auth-tab[onclick*="register"]');
+    
+    if (tab === 'login') {
+        loginForm.style.display = 'block';
+        registerForm.style.display = 'none';
+        loginTab.classList.add('active');
+        registerTab.classList.remove('active');
+    } else {
+        loginForm.style.display = 'none';
+        registerForm.style.display = 'block';
+        loginTab.classList.remove('active');
+        registerTab.classList.add('active');
+    }
+}
+
+function loginWithEmail() {
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    
+    if (!email || !password) {
+        showToast('Error', 'Please fill in all fields');
+        return;
+    }
+    
+    firebase.auth().signInWithEmailAndPassword(email, password)
+        .then((userCredential) => {
+            const user = userCredential.user;
+            return fetch('/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    firebaseUid: user.uid,
+                    displayName: user.displayName || user.email.split('@')[0],
+                    email: user.email
+                })
+            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentUser = data.user;
+                updateAuthUI();
+                showToast('Success', 'Login successful!');
+                showPage('home');
+            } else {
+                showToast('Error', data.message);
+            }
+        })
+        .catch((error) => {
+            showToast('Error', error.message);
+        });
+}
+
+function registerWithEmail() {
+    const name = document.getElementById('registerName').value;
+    const email = document.getElementById('registerEmail').value;
+    const password = document.getElementById('registerPassword').value;
+    
+    if (!name || !email || !password) {
+        showToast('Error', 'Please fill in all fields');
+        return;
+    }
+    
+    firebase.auth().createUserWithEmailAndPassword(email, password)
+        .then((userCredential) => {
+            const user = userCredential.user;
+            // Update display name
+            return user.updateProfile({
+                displayName: name
+            }).then(() => {
+                return fetch('/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        firebaseUid: user.uid,
+                        displayName: name,
+                        email: user.email
+                    })
+                });
+            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentUser = data.user;
+                updateAuthUI();
+                showToast('Success', 'Registration successful!');
+                showPage('home');
+            } else {
+                showToast('Error', data.message);
+            }
+        })
+        .catch((error) => {
+            showToast('Error', error.message);
+        });
+}
+
+function loginWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    
+    firebase.auth().signInWithPopup(provider)
+        .then((result) => {
+            const user = result.user;
+            return fetch('/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    firebaseUid: user.uid,
+                    displayName: user.displayName,
+                    email: user.email
+                })
+            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentUser = data.user;
+                updateAuthUI();
+                showToast('Success', 'Google login successful!');
+                showPage('home');
+            } else {
+                showToast('Error', data.message);
+            }
+        })
+        .catch((error) => {
+            showToast('Error', error.message);
+        });
+}
+
+function logout() {
+    firebase.auth().signOut()
+        .then(() => {
+            return fetch('/auth/logout', {
+                method: 'POST'
+            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentUser = null;
+                updateAuthUI();
+                showToast('Success', 'Logout successful!');
+                showPage('home');
+            }
+        })
+        .catch(error => {
+            showToast('Error', 'Logout failed. Please try again.');
+        });
+}
+
+function updateProfile() {
+    const displayName = document.getElementById('profileName').value;
+    const phoneNumber = document.getElementById('profilePhone').value;
+    const defaultAddress = document.getElementById('profileAddress').value;
+    
+    fetch('/auth/update-profile', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            displayName: displayName,
+            phoneNumber: phoneNumber,
+            defaultAddress: defaultAddress
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            currentUser = data.user;
+            showToast('Success', 'Profile updated successfully!');
+        } else {
+            showToast('Error', data.message);
+        }
+    })
+    .catch(error => {
+        showToast('Error', 'Profile update failed. Please try again.');
+    });
+}
+
+function toggleUserMenu() {
+    const dropdown = document.getElementById('userDropdown');
+    dropdown.classList.toggle('active');
+}
+
+// Close user dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    const userMenu = document.querySelector('.user-menu');
+    const dropdown = document.getElementById('userDropdown');
+    
+    if (userMenu && !userMenu.contains(e.target)) {
+        dropdown.classList.remove('active');
+    }
+});
 
 // Setup event listeners
 function setupEventListeners() {
@@ -392,6 +721,40 @@ function renderCart() {
     const deliveryCharge = subtotal >= 400 ? 0 : 70;
     const total = subtotal + deliveryCharge;
     
+    // Check if user is logged in
+    if (!currentUser) {
+        cartContent.innerHTML = `
+            <div class="cart-items">
+                ${cartItemsHTML}
+            </div>
+            <div class="order-summary">
+                <h3 class="order-summary-title">Order Summary</h3>
+                <div class="order-summary-item">
+                    <span>Subtotal (${cart.reduce((sum, item) => sum + item.quantity, 0)} items)</span>
+                    <span>₹${subtotal}</span>
+                </div>
+                <div class="order-summary-item">
+                    <span>Delivery Charge</span>
+                    <span>${deliveryCharge === 0 ? 'FREE' : '₹' + deliveryCharge}</span>
+                </div>
+                <div class="order-summary-total">
+                    <span>Total</span>
+                    <span>₹${total}</span>
+                </div>
+                ${deliveryCharge === 0 ? '<div class="free-delivery-notice">🎉 Free delivery on orders above ₹400!</div>' : ''}
+                <div class="login-required-notice" style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 1rem; border-radius: 8px; margin-top: 1rem; text-align: center;">
+                    <i class="fas fa-lock" style="color: #f39c12; margin-right: 0.5rem;"></i>
+                    <strong>Login Required</strong>
+                    <p style="margin: 0.5rem 0 0 0; color: #856404;">Please login to proceed with checkout</p>
+                    <button class="btn btn-warning" onclick="showPage('login')" style="margin-top: 0.5rem;">
+                        Login to Continue
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
     cartContent.innerHTML = `
         <div class="cart-items">
             ${cartItemsHTML}
@@ -479,10 +842,38 @@ function renderCheckout() {
             <span>₹${total}</span>
         </div>
     `;
+    
+    // Auto-fill user details if logged in
+    if (currentUser) {
+        const nameField = document.getElementById('name');
+        const emailField = document.getElementById('email');
+        const phoneField = document.getElementById('phone');
+        const addressField = document.getElementById('address');
+        
+        if (nameField && currentUser.displayName) {
+            nameField.value = currentUser.displayName;
+        }
+        if (emailField && currentUser.email) {
+            emailField.value = currentUser.email;
+        }
+        if (phoneField && currentUser.phoneNumber) {
+            phoneField.value = currentUser.phoneNumber;
+        }
+        if (addressField && currentUser.defaultAddress) {
+            addressField.value = currentUser.defaultAddress;
+        }
+    }
 }
 
 // Handle checkout
 function handleCheckout() {
+    // Check if user is logged in
+    if (!currentUser) {
+        showToast('Login Required', 'Please login to place an order');
+        showPage('login');
+        return;
+    }
+    
     const formData = new FormData(document.getElementById('checkoutForm'));
     const orderData = {
         customerName: formData.get('name') || document.getElementById('name')?.value,
@@ -594,4 +985,67 @@ function loadCart() {
 }
 
 // Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', initializeApp); 
+document.addEventListener('DOMContentLoaded', initializeApp);
+
+// FAQ functionality
+document.addEventListener('click', function(e) {
+    if (e.target.closest('.faq-question')) {
+        const faqItem = e.target.closest('.faq-item');
+        const isActive = faqItem.classList.contains('active');
+        
+        // Close all FAQ items
+        document.querySelectorAll('.faq-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        // Open clicked item if it wasn't active
+        if (!isActive) {
+            faqItem.classList.add('active');
+        }
+    }
+});
+
+// Enhanced order confirmation display
+function renderOrderConfirmation(orderData) {
+    const orderDetails = document.getElementById('orderDetails');
+    if (!orderDetails) return;
+    
+    const orderId = generateOrderId();
+    const estimatedDelivery = new Date(Date.now() + 40 * 60000).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    
+    orderDetails.innerHTML = `
+        <div class="order-info-grid">
+            <div class="order-info-item">
+                <div class="order-info-label">Order ID</div>
+                <div class="order-info-value">${orderId}</div>
+            </div>
+            <div class="order-info-item">
+                <div class="order-info-label">Customer</div>
+                <div class="order-info-value">${orderData.customerName}</div>
+            </div>
+            <div class="order-info-item">
+                <div class="order-info-label">Phone</div>
+                <div class="order-info-value">${orderData.phone}</div>
+            </div>
+            <div class="order-info-item">
+                <div class="order-info-label">Delivery Address</div>
+                <div class="order-info-value">${orderData.deliveryAddress}</div>
+            </div>
+            <div class="order-info-item">
+                <div class="order-info-label">Payment Method</div>
+                <div class="order-info-value">${orderData.paymentMethod}</div>
+            </div>
+            <div class="order-info-item">
+                <div class="order-info-label">Estimated Delivery</div>
+                <div class="order-info-value">${estimatedDelivery}</div>
+            </div>
+            <div class="order-info-item total">
+                <div class="order-info-label">Total Amount</div>
+                <div class="order-info-value">₹${orderData.total}</div>
+            </div>
+        </div>
+    `;
+} 

@@ -1,6 +1,9 @@
 package com.fooddelivery.controller;
 
 import java.util.List;
+import java.util.Optional;
+
+import javax.servlet.http.HttpSession;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -9,16 +12,21 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.fooddelivery.model.MenuItem;
+import com.fooddelivery.model.User;
 import com.fooddelivery.service.MenuService;
+import com.fooddelivery.service.UserService;
 
 @Controller
 public class MenuController {
 
     @Autowired
     private MenuService menuService;
+    
+    @Autowired
+    private UserService userService;
 
     @GetMapping("/")
-    public String home(Model model) {
+    public String home(Model model, HttpSession session) {
         // Add current year for footer
         model.addAttribute("currentYear", java.time.Year.now().getValue());
         
@@ -27,11 +35,15 @@ public class MenuController {
         String menuItemsJson = convertToJson(menuItems);
         model.addAttribute("menuItemsJson", menuItemsJson);
         
+        // Add user information
+        User user = getCurrentUser(session);
+        model.addAttribute("user", user);
+        
         return "index";
     }
 
     @GetMapping("/menu")
-    public String menu(Model model) {
+    public String menu(Model model, HttpSession session) {
         List<MenuItem> menuItems = menuService.getAllAvailableItems();
         List<String> categories = menuService.getAllCategories();
         
@@ -43,11 +55,15 @@ public class MenuController {
         String menuItemsJson = convertToJson(menuItems);
         model.addAttribute("menuItemsJson", menuItemsJson);
         
+        // Add user information
+        User user = getCurrentUser(session);
+        model.addAttribute("user", user);
+        
         return "index";
     }
 
     @GetMapping("/menu/category")
-    public String menuByCategory(@RequestParam String category, Model model) {
+    public String menuByCategory(@RequestParam String category, Model model, HttpSession session) {
         List<MenuItem> menuItems = menuService.getItemsByCategory(category);
         List<String> categories = menuService.getAllCategories();
         
@@ -59,6 +75,10 @@ public class MenuController {
         // Add menu items as JSON for JavaScript
         String menuItemsJson = convertToJson(menuItems);
         model.addAttribute("menuItemsJson", menuItemsJson);
+        
+        // Add user information
+        User user = getCurrentUser(session);
+        model.addAttribute("user", user);
         
         return "index";
     }
@@ -93,5 +113,14 @@ public class MenuController {
                  .replace("\n", "\\n")
                  .replace("\r", "\\r")
                  .replace("\t", "\\t");
+    }
+    
+    private User getCurrentUser(HttpSession session) {
+        String firebaseUid = (String) session.getAttribute("firebaseUid");
+        if (firebaseUid != null) {
+            Optional<User> userOpt = userService.findByFirebaseUid(firebaseUid);
+            return userOpt.orElse(null);
+        }
+        return null;
     }
 } 
